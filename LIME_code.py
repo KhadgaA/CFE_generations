@@ -6,32 +6,7 @@ import pandas as pd
 from sklearn.linear_model import Ridge
 from sklearn.metrics import pairwise_distances
 from sklearn.model_selection import train_test_split
-import lime
-import lime.lime_tabular
-
-
-
-data = pd.read_csv("data.csv")
-data = data.dropna()
-
-categorical_features = ["blue", "dual_sim", "four_g", "three_g", "touch_screen", "wifi"]
-categorical_features_idx = [
-    idx for idx, feature in enumerate(data.columns) if feature in categorical_features
-]
-
-# data["price_range"] = data["price_range"].map({0: 0, 1: 0, 2: 1, 3: 1})
-
-X_train, X_test, y_train, y_test = train_test_split(
-    data.drop(columns=["price_range"]).values, data["price_range"], random_state=1
-)
-
-
 from sklearn.ensemble import RandomForestClassifier
-
-rf = RandomForestClassifier(n_estimators=100, random_state=1)
-rf.fit(X_train, y_train)
-rf.predict(X_test)
-
 
 def generate_neighbours(data, test_points, num_samples, categorical_features=None):
     transforms = sklearn.preprocessing.StandardScaler()
@@ -43,11 +18,11 @@ def generate_neighbours(data, test_points, num_samples, categorical_features=Non
     num_features = data.shape[1]
     num_samples = num_samples + 1
     perturbations = np.random.normal(scale=1, loc=0, size=(num_samples, num_features))
-    print(perturbations.shape, std.shape, data.shape, mean.shape)
+    # print(perturbations.shape, std.shape, data.shape, mean.shape)
     neighbours = perturbations * std + mean
     if categorical_features is not None:
         for feature in categorical_features:
-            print(feature)
+            # print(feature)
             categorical_features = np.random.choice(
                 [1, 0], num_samples, p=[mean[feature], 1 - mean[feature]], replace=True
             )
@@ -58,7 +33,7 @@ def generate_neighbours(data, test_points, num_samples, categorical_features=Non
     return neighbours, mean, std
 
 
-def generate_predictions(neighbours, predictor=rf.predict_proba):
+def generate_predictions(neighbours, predictor):
     predictions_neighbours = predictor(neighbours)
     return predictions_neighbours
 
@@ -73,10 +48,37 @@ def calculate_distances(neighbours, mean, std):
     return distances
 
 
+# categorical_features = ["blue", "dual_sim", "four_g", "three_g", "touch_screen", "wifi"]
+# categorical_features_idx = [
+#     idx for idx, feature in enumerate(data.columns) if feature in categorical_features
+# ]
+
+# data["price_range"] = data["price_range"].map({0: 0, 1: 0, 2: 1, 3: 1})
+
+
+
+data = pd.read_csv("diabetes.csv")
+data = data.dropna()
+
+categorical_features_idx = []
+target_column = "Outcome"
+X_train, X_test, y_train, y_test = train_test_split(
+    data.drop(columns=[target_column]).values, data[target_column], random_state=1
+)
+
+transforms = sklearn.preprocessing.StandardScaler()
+X_train_ = transforms.fit_transform(X_train)
+X_test = transforms.transform(X_test)
+
+rf = RandomForestClassifier(n_estimators=100, random_state=1)
+rf.fit(X_train, y_train)
+rf.predict(X_test)
+
+
 num_features = X_train.shape[1]
-test_points = X_train[1]
-num_samples = 2
-k_features = 5
+test_points = X_test[0]
+num_samples = 5000
+k_features = 8
 
 
 neighbours, mean, std = generate_neighbours(
@@ -85,8 +87,8 @@ neighbours, mean, std = generate_neighbours(
 predictions_neighbours = generate_predictions(neighbours, rf.predict_proba)
 distances = calculate_distances(neighbours, mean, std)
 
-class_names = ["0", "1", "2", "3"]
-top_labels = 10
+class_names = ["0", "1"]
+top_labels = 8
 
 local_exp = {}
 intercept = {}
@@ -130,7 +132,7 @@ def interpret_instance(
     weights = kernel_fn(distances)
     labels_column = predictions_neighbours[:, label]
     used_features = feature_selection(neighbours, labels_column, weights, k_features)
-    print(used_features)
+    # print(used_features)
 
     model_regressor = Ridge(alpha=1, fit_intercept=True, random_state=0)
     linear_model = model_regressor
@@ -161,7 +163,7 @@ def interpret_instance(
 
 
 for label in top_labels_list:
-    print(label)
+    print("Class: ",label)
 
     intercept[label], local_exp[label], score[label], local_pred[label] = (
         interpret_instance(
@@ -195,14 +197,16 @@ def plot_local_exp(local_exp):
 
 plot_local_exp(local_exp)
 
+# import lime
+# import lime.lime_tabular
 
-explainer = lime.lime_tabular.LimeTabularExplainer(
-    X_train,
-    feature_names=data.columns[:-1],
-    class_names=class_names,
-    discretize_continuous=False,
-)
-exp = explainer.explain_instance(
-    test_points, rf.predict_proba, num_features=5, top_labels=top_labels
-)
-exp.show_in_notebook(show_table=True, show_all=False)
+# explainer = lime.lime_tabular.LimeTabularExplainer(
+#     X_train,
+#     feature_names=data.columns[:-1],
+#     class_names=class_names,
+#     discretize_continuous=False,
+# )
+# exp = explainer.explain_instance(
+#     test_points, rf.predict_proba, num_features=5, top_labels=top_labels
+# )
+# exp.show_in_notebook(show_table=True, show_all=False)
